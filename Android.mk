@@ -71,7 +71,10 @@ endif
 LOCAL_REQUIRED_MODULES += \
     mkfs.erofs.recovery \
     dump.erofs.recovery \
-    fsck.erofs.recovery
+    fsck.erofs.recovery \
+    mkfs.ntfs.recovery \
+    mount.ntfs.recovery \
+    fsck.ntfs.recovery
 
 LOCAL_REQUIRED_MODULES += \
     e2fsck.recovery \
