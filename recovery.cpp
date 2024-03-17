@@ -234,6 +234,7 @@ static InstallResult apply_update_menu(Device* device, Device::BuiltinAction* re
   for (;;) {
     items.clear();
     items.push_back("Apply from ADB");
+    items.push_back("Choose from internal storage (/sdcard)");
 
     if (InitializeVirtiofs()) {
       non_storage_items++;
@@ -266,6 +267,8 @@ static InstallResult apply_update_menu(Device* device, Device::BuiltinAction* re
 
     if (chosen == item_sideload) {
       status = ApplyFromAdb(device, false /* rescue_mode */, reboot_action);
+    } else if (chosen == 1) {
+      status = ApplyFromSdcard(device);
     } else if (chosen == item_virtiofs && InitializeVirtiofs()) {
       status = ApplyFromVirtiofs(device);
     } else {
