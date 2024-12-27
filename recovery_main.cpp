@@ -201,7 +201,7 @@ static std::string load_locale_from_cache() {
 
 static void copy_userdata_files() {
   android::base::SetLogger(android::base::StdioLogger);
-  if (ensure_path_mounted("/data") == 0) {
+  if (ensure_path_mounted("/data") == 0 || !android::base::GetBoolProperty("sys.recovery.data_is_part", false)) {
     if (access(adb_keys_root, F_OK) != 0) {
       if (access(adb_keys_data, R_OK) == 0) {
         std::error_code ec;  // to invoke the overloaded copy_file() that won't throw.
@@ -210,7 +210,8 @@ static void copy_userdata_files() {
         }
       }
     }
-    ensure_path_unmounted("/data");
+    if (android::base::GetBoolProperty("sys.recovery.data_is_part", false)) {
+    ensure_path_unmounted("/data");}
   }
   android::base::SetLogger(UiLogger);
 }
@@ -522,12 +523,9 @@ int main(int argc, char** argv) {
   listener_thread.detach();
 
   // Set up adb_keys and enable root before starting ADB.
-  // Guard it under a property as we on x86 doesn't need this
-  if (android::base::GetBoolProperty("sys.recovery.copy_userdata", false)) {
-    if (IsRoDebuggable() && !fastboot) {
-      copy_userdata_files();
-      android::base::SetProperty("service.adb.root", "1");
-    }
+  if (IsRoDebuggable() && !fastboot) {
+    copy_userdata_files();
+    android::base::SetProperty("service.adb.root", "1");
   }
 
   device->InitDevice();
