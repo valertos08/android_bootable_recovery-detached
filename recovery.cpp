@@ -226,6 +226,7 @@ static InstallResult apply_update_menu(Device* device, Device::BuiltinAction* re
 
   const int item_sideload = 0;
   const int item_virtiofs = 1;
+  unsigned int item_add_extra = 0;
   unsigned int non_storage_items = 1; // ADB sideload, at least
   std::vector<VolumeInfo> volumes;
 
@@ -234,7 +235,12 @@ static InstallResult apply_update_menu(Device* device, Device::BuiltinAction* re
   for (;;) {
     items.clear();
     items.push_back("Apply from ADB");
-    items.push_back("Choose from internal storage (/sdcard)");
+
+    if (!android::base::GetBoolProperty("sys.recovery.data_is_part", false)) {
+      item_add_extra++;
+      non_storage_items++;
+      items.push_back("Choose from internal storage (/sdcard)");
+    }
 
     if (InitializeVirtiofs()) {
       non_storage_items++;
@@ -269,7 +275,7 @@ static InstallResult apply_update_menu(Device* device, Device::BuiltinAction* re
       status = ApplyFromAdb(device, false /* rescue_mode */, reboot_action);
     } else if (chosen == 1) {
       status = ApplyFromSdcard(device);
-    } else if (chosen == item_virtiofs && InitializeVirtiofs()) {
+    } else if (chosen == item_virtiofs + item_add_extra && InitializeVirtiofs()) {
       status = ApplyFromVirtiofs(device);
     } else {
       status = ApplyFromStorage(device, volumes[chosen - non_storage_items]);
