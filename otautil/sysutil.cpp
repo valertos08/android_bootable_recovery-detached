@@ -22,6 +22,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <limits>
@@ -221,10 +222,14 @@ MemMapping::~MemMapping() {
 
 void Reboot(std::string_view target) {
   std::string cmd = "reboot," + std::string(target);
+  std::string request = "1" + std::string(target);
   // Honor the quiescent mode if applicable.
   if (target != "bootloader" && target != "fastboot" &&
       android::base::GetBoolProperty("ro.boot.quiescent", false)) {
     cmd += ",quiescent";
+  }
+  if (!android::base::SetProperty("sys.shutdown.requested", request)) {
+    LOG(WARNING) << "Unable to set sys.shutdown.requested property !";
   }
   if (!android::base::SetProperty(ANDROID_RB_PROPERTY, cmd)) {
     LOG(FATAL) << "Reboot failed";
@@ -235,6 +240,10 @@ void Reboot(std::string_view target) {
 
 bool Shutdown(std::string_view target) {
   std::string cmd = "shutdown," + std::string(target);
+  std::string request = "0" + std::string(target);
+  if (!android::base::SetProperty("sys.shutdown.requested", request)) {
+    LOG(WARNING) << "Unable to set sys.shutdown.requested property !";
+  }
   return android::base::SetProperty(ANDROID_RB_PROPERTY, cmd);
 }
 
