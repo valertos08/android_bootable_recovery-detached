@@ -171,6 +171,7 @@ int Device::HandleMenuKey(int key, bool visible) {
     case KEY_ENTER:
     case KEY_POWER:
     case BTN_MOUSE:
+    case KEY_MUTE:
     case KEY_SEND:
     case BTN_SOUTH:
     case BTN_START:
