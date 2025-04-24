@@ -21,11 +21,17 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sys/stat.h>
 
 #include <android-base/logging.h>
 
 #include "otautil/boot_state.h"
 #include "recovery_ui/ui.h"
+
+static bool system_uses_uefi() {
+  struct stat info;
+  return (stat("/sys/firmware/efi", &info) == 0);
+}
 
 typedef std::pair<std::string, Device::BuiltinAction> menu_action_t;
 
@@ -38,7 +44,8 @@ static std::vector<menu_action_t> g_main_actions{
 };
 
 static std::vector<std::string> g_advanced_header{ "Advanced options" };
-static std::vector<menu_action_t> g_advanced_actions{
+static std::vector<menu_action_t> get_advanced_actions() {
+  std::vector<menu_action_t> actions{
   { "Enter fastboot", Device::ENTER_FASTBOOT },
   { "Reboot to bootloader", Device::REBOOT_BOOTLOADER },
   { "Reboot to recovery", Device::REBOOT_RECOVERY },
@@ -51,6 +58,13 @@ static std::vector<menu_action_t> g_advanced_actions{
   { "Power off", Device::SHUTDOWN },
 };
 
+  if (system_uses_uefi()) {
+    actions.push_back({ "Reboot to UEFI Firmware Settings", Device::REBOOT_UEFI_SETTINGS });
+  }
+
+  return actions;
+}
+
 static std::vector<std::string> g_wipe_header{ "Factory reset" };
 static std::vector<menu_action_t> g_wipe_actions{
   { "Format data/factory reset", Device::WIPE_DATA },
@@ -60,6 +74,7 @@ static std::vector<menu_action_t> g_wipe_actions{
 
 static std::vector<menu_action_t>* current_menu_ = &g_main_actions;
 static std::vector<std::string> g_menu_items;
+static std::vector<menu_action_t> g_advanced_actions = get_advanced_actions();
 
 static void PopulateMenuItems() {
   g_menu_items.clear();

@@ -69,6 +69,11 @@ static constexpr const char* LOCALE_FILE = "/cache/recovery/last_locale";
 
 static RecoveryUI* ui = nullptr;
 
+static bool system_uses_uefi() {
+    struct stat info;
+    return (stat("/sys/firmware/efi", &info) == 0);
+}
+
 static bool IsRoDebuggable() {
   return android::base::GetBoolProperty("ro.debuggable", false);
 }
@@ -622,6 +627,51 @@ int main(int argc, char** argv) {
         Reboot("userrequested,fastboot");
         break;
 
+      case Device::REBOOT_UEFI_SETTINGS:
+        if (!system_uses_uefi()) {
+          ui->Print("UEFI firmware not found, abort !\n");
+        } else {
+          ui->Print("Rebooting...\n");
+          const std::string efi_var_path = "/sys/firmware/efi/efivars";
+          const std::string os_indications_var = "/OsIndications-8be4df61-93ca-11d2-aa0d-00e098032b8c";
+          const std::string full_path = efi_var_path + os_indications_var;
+
+          if (ensure_path_mounted(efi_var_path) != 0) {
+            ui->Print("efivars is not mounted, check your fstab !\n");
+            break;
+          }
+
+          FILE* f = fopen(full_path.c_str(), "rb+");
+          if (!f) {
+            ui->Print("UEFI is not writable, is Secure Boot is on ?\n");
+            break;
+          }
+
+          uint32_t attributes;
+          uint64_t indications;
+
+          if (fread(&attributes, sizeof(attributes), 1, f) != 1 ||
+              fread(&indications, sizeof(indications), 1, f) != 1) {
+              fclose(f);
+              ui->Print("Failed to read UEFI variable\n");
+              break;
+          }
+      
+          // Set boot to firmware bit (0x1)
+          indications |= 0x1;
+          
+          // Write back to variable
+          rewind(f);
+          if (fwrite(&attributes, sizeof(attributes), 1, f) != 1 ||
+              fwrite(&indications, sizeof(indications), 1, f) != 1) {
+              fclose(f);
+              ui->Print("Failed to write UEFI variable\n");
+              break;
+          }
+          fclose(f);
+          Reboot("unknown" + std::to_string(ret));
+        }
+        break;
       default:
         ui->Print("Rebooting...\n");
         Reboot("unknown" + std::to_string(ret));
