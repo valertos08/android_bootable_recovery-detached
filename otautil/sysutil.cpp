@@ -231,6 +231,8 @@ void Reboot(std::string_view target) {
   if (!android::base::SetProperty("sys.shutdown.requested", request)) {
     LOG(WARNING) << "Unable to set sys.shutdown.requested property !";
   }
+  if (target == "recovery") {
+  sleep(3);}
   if (!android::base::SetProperty(ANDROID_RB_PROPERTY, cmd)) {
     LOG(FATAL) << "Reboot failed";
   }
