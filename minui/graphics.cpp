@@ -496,6 +496,13 @@ static void init_console_manager() {
 }
 
 int gr_init() {
+  std::string backend_prop = android::base::GetProperty("ro.minui.graphics_backend", "");
+  if (backend_prop == "fbdev") {
+    return gr_init({ GraphicsBackend::FBDEV });
+  } else if (backend_prop == "drm") {
+    return gr_init({ GraphicsBackend::DRM });
+  }
+
   return gr_init(default_backends);
 }
 
