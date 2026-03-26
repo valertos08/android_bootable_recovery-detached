@@ -70,4 +70,7 @@ class MinuiBackendFbdev : public MinuiBackend {
   size_t displayed_buffer{ 0 };
   fb_var_screeninfo vi;
   android::base::unique_fd fb_fd;
+
+  void DropMaster() override;
+  void SetMaster() override;
 };

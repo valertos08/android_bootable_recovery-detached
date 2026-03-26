@@ -21,13 +21,24 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <atomic>
+#include <functional>
 #include <memory>
 
 #include <android-base/properties.h>
 
+#include <linux/vt.h>
+#include <linux/kd.h>
+#include <termios.h>
+#include <signal.h>
+#include <pthread.h>
+
 #include "graphics_drm.h"
 #include "graphics_fbdev.h"
 #include "minui/minui.h"
+
+std::atomic<bool> is_in_console(false);
+std::function<void()> gr_on_acquire_console = nullptr;
 
 static GRFont* gr_font = nullptr;
 static GRFont* gr_font_menu = nullptr;
@@ -390,6 +401,9 @@ int gr_init_font(const char* name, GRFont** dest) {
 }
 
 void gr_flip() {
+  // Prevent fighting with the console for display ownership
+  if (is_in_console) return;
+
   gr_draw = gr_backend->Flip();
 }
 
@@ -402,6 +416,83 @@ std::unique_ptr<MinuiBackend> create_backend(GraphicsBackend backend) {
     default:
       return nullptr;
   }
+}
+
+constexpr int ANDROID_VT = 7;
+static int console_fd = -1;
+static pthread_t console_thread;
+
+static void sig_handler(int /* sig */) {
+    // Dummy handler to interrupt sigwait
+}
+
+static void* console_manager_loop(void* /* arg */) {
+    struct vt_mode vm;
+    vm.mode = VT_PROCESS;
+    vm.waitv = 0;
+    vm.relsig = SIGUSR1;
+    vm.acqsig = SIGUSR2;
+    vm.frsig = 0;
+
+    struct sigaction act;
+    sigemptyset(&act.sa_mask);
+    act.sa_handler = sig_handler;
+    act.sa_flags = 0;
+    sigaction(vm.relsig, &act, NULL);
+    sigaction(vm.acqsig, &act, NULL);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, vm.relsig);
+    sigaddset(&mask, vm.acqsig);
+    pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+    if (ioctl(console_fd, VT_SETMODE, &vm) < 0) {
+        printf("Failed to set VT_PROCESS\n");
+        return nullptr;
+    }
+
+    int sig = 0;
+    while (true) {
+        sigwait(&mask, &sig);
+
+        if (sig == vm.relsig) {
+            is_in_console = true;  // Lock out progress_thread from drawing
+            
+            if (gr_backend) gr_backend->DropMaster();
+            ioctl(console_fd, VT_RELDISP, 1);
+            
+        } else if (sig == vm.acqsig) {
+            ioctl(console_fd, VT_RELDISP, VT_ACKACQ);
+            if (gr_backend) gr_backend->SetMaster();
+            
+            is_in_console = false; // Restore drawing permissions for minui
+            
+            if (gr_on_acquire_console) {
+                gr_on_acquire_console(); // Wake up RecoveryUI to trigger a full redraw
+            }
+        }
+    }
+    return nullptr;
+}
+
+static void init_console_manager() {
+    int fd = open("/dev/tty0", O_RDWR | O_SYNC | O_CLOEXEC);
+    if (fd < 0) return;
+
+    // Force Kernel to switch to VT 7
+    ioctl(fd, VT_ACTIVATE, ANDROID_VT);
+    ioctl(fd, VT_WAITACTIVE, ANDROID_VT);
+
+    // Close the old fd (pointing to VT 1) and reopen to get VT 7's fd
+    close(fd);
+    console_fd = open("/dev/tty0", O_RDWR | O_SYNC | O_CLOEXEC);
+    if (console_fd < 0) return;
+
+    // Switch VT 7 to Graphics mode (for minui)
+    ioctl(console_fd, KDSETMODE, (void*)KD_GRAPHICS);
+
+    pthread_create(&console_thread, nullptr, console_manager_loop, nullptr);
 }
 
 int gr_init() {
@@ -493,6 +584,9 @@ int gr_init(std::initializer_list<GraphicsBackend> backends) {
   if (gr_draw->pixel_bytes != 4) {
     printf("gr_init: Only 4-byte pixel formats supported\n");
   }
+
+  // Start the console virtual terminal manager
+  init_console_manager();
 
   return 0;
 }

@@ -162,6 +162,19 @@ next_fb:
   return gr_draw;
 }
 
+void MinuiBackendFbdev::DropMaster() {
+  // When switching to Console, force the hardware to scroll to yoffset = 0
+  // so kernel (fbcon) drawings on Buffer 0 are visible immediately.
+  vi.yoffset = 0;
+  ioctl(fb_fd.get(), FBIOPUT_VSCREENINFO, &vi);
+}
+
+void MinuiBackendFbdev::SetMaster() {
+  // When returning to GUI, call minui's built-in function to force the
+  // hardware to display the buffer currently used by Recovery.
+  SetDisplayedFramebuffer(displayed_buffer);
+}
+
 GRSurface* MinuiBackendFbdev::Flip() {
   if (double_buffered) {
     // Change gr_draw to point to the buffer currently displayed, then flip the driver so we're

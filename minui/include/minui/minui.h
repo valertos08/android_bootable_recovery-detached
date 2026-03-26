@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -242,3 +243,9 @@ std::vector<std::string> get_locales_in_png(const std::string& png_name);
 // Free a surface allocated by any of the res_create_*_surface()
 // functions.
 void res_free_surface(GRSurface* surface);
+
+// Flag indicating we are in Console to prevent overlapping draws
+extern std::atomic<bool> is_in_console;
+
+// Callback to notify RecoveryUI that GUI has been restored
+extern std::function<void()> gr_on_acquire_console;

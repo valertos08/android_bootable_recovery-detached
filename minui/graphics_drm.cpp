@@ -466,6 +466,32 @@ GRSurface* MinuiBackendDrm::Flip() {
   return surface;
 }
 
+void MinuiBackendDrm::DropMaster() {
+  if (drm_fd >= 0) {
+    // Disable minui's CRTC so kernel fbcon can take over the display
+    DrmInterface* current_drm = &drm[active_display];
+    if (current_drm->monitor_crtc) {
+      DrmDisableCrtc(drm_fd, current_drm->monitor_crtc);
+    }
+    
+    drmDropMaster(drm_fd);
+  }
+}
+
+void MinuiBackendDrm::SetMaster() {
+  if (drm_fd >= 0) {
+    drmSetMaster(drm_fd);
+    
+    // Force hardware (CRTC) to immediately display minui's current buffer
+    DrmInterface* current_drm = &drm[active_display];
+    if (current_drm->monitor_crtc) {
+      DrmEnableCrtc(drm_fd, current_drm->monitor_crtc,
+                    current_drm->GRSurfaceDrms[current_drm->current_buffer],
+                    &current_drm->monitor_connector->connector_id);
+    }
+  }
+}
+
 MinuiBackendDrm::~MinuiBackendDrm() {
   for (int i = 0; i < DRM_MAX; i++) {
     if (drm[i].monitor_connector) {
