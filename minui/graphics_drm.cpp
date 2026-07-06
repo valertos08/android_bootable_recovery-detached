@@ -25,8 +25,10 @@
 #include <unistd.h>
 
 #include <memory>
+#include <string>
 
 #include <android-base/macros.h>
+#include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <android-base/unique_fd.h>
 #include <drm_fourcc.h>
@@ -336,9 +338,19 @@ GRSurface* MinuiBackendDrm::Init() {
   drmModeRes* res = nullptr;
   drm_fd = -1;
 
+  std::string drm_device_prop = android::base::GetProperty("ro.minui.drm_device", "");
+  if (drm_device_prop.empty()) {
+    drm_device_prop = "/dev/dri/card%";
+  }
+  bool has_wildcard = (drm_device_prop.back() == '%');
+  std::string path_prefix =
+      has_wildcard ? drm_device_prop.substr(0, drm_device_prop.length() - 1) : drm_device_prop;
+  int max_minor = has_wildcard ? DRM_MAX_MINOR : 1;
+
   /* Consider DRM devices in order. */
-  for (int i = 0; i < DRM_MAX_MINOR; i++) {
-    auto dev_name = android::base::StringPrintf(DRM_DEV_NAME, DRM_DIR_NAME, i);
+  for (int i = 0; i < max_minor; i++) {
+    std::string dev_name =
+        has_wildcard ? android::base::StringPrintf("%s%d", path_prefix.c_str(), i) : path_prefix;
     android::base::unique_fd fd(open(dev_name.c_str(), O_RDWR | O_CLOEXEC));
     if (fd == -1) continue;
 
@@ -355,6 +367,7 @@ GRSurface* MinuiBackendDrm::Init() {
     /* Use this device if it has at least one connected monitor. */
     if (res->count_crtcs > 0 && res->count_connectors > 0) {
       if (find_first_connected_connector(fd.get(), res)) {
+        printf("Selected drm device: %s\n", dev_name.c_str());
         drm_fd = fd.release();
         break;
       }
